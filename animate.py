@@ -27,15 +27,21 @@ class DataAcquisition:
         self.stop_event = threading.Event()
         # Prepare for storing processed data
         self.processed_data = pd.DataFrame(columns = ['X', 'Y1', 'Y2'])
+        self.unprocessed_data_batches = []
         self.fig, self.ax = plt.subplots(3,1,figsize=(25, 10))
-        self.scatter = self.ax[0].scatter([],[], s=1)
-        self.heatmap = self.ax[1].imshow(np.zeros((50, 50)), interpolation='nearest', origin='lower', cmap='plasma', aspect='auto')
         self.cbar = None
-        self.hist1d = self.ax[2].bar([],[])
+        self.heatmap=None
+        self.scatter=None
+        self.hist1d=None
+        
+        
+    def listen_for_stop(self):
+        input("Press Enter to stop data acquisition.")
+        self.stop_event.set()
 
     def acquire_data(self):
-        rate = 20000
-        num_samples = 100000
+        rate = 2000
+        num_samples = 1000
         columns = ['Timestamp', 'Binary Word']  # Extend columns for processed data
         
         with nidaqmx.Task() as task:
@@ -48,36 +54,39 @@ class DataAcquisition:
             # Set the sample rate and number of samples for the task.
             task.timing.cfg_samp_clk_timing(rate=rate, samps_per_chan=num_samples, sample_mode=nidaqmx.constants.AcquisitionType.CONTINUOUS)
             task.start()
-
+            BATCH_SIZE = 10  #Number of data reads before processing
             while not self.stop_event.is_set():
-                data = np.array(task.read(number_of_samples_per_channel=num_samples))
-                words = np.bitwise_or.reduce(data * (1 << np.arange(16)[:, np.newaxis]), axis=0)
-                # Convert each word to a 16-bit binary string, preserving leading zeros.
-                binary_words = np.array(["'" + format(word, '016b') for word in words])
-            
-                # Convert binary words to integers for processing
-                binary_data = [int(word, 2) for word in words]
-                
-                # Process the data 
-                x, y1, y2 = self.raw2coords(binary_data)
-                
-                # Optional: Handle the processed data (e.g., for plotting or saving)
-                processed_df = pd.DataFrame({'X': x, 'Y1': y1, 'Y2': y2})
-                # You could plot here or append to a DataFrame for later use
-                self.processed_data = pd.concat([self.processed_data, processed_df], ignore_index=True)
-                self.process()
-                # Save the raw data chunk to CSV
-                timestamps = [datetime.datetime.now().strftime("%M:%S.%f") for _ in range(len(words))]
-                df_chunk = pd.DataFrame(np.column_stack((timestamps, binary_words)), columns=columns)
-                df_chunk.to_csv(filename, mode='a', header=False, index=False)
-    
-    def raw2coords(self, data):
+                data_read = np.array(task.read(number_of_samples_per_channel=num_samples))
+               # words = np.bitwise_or.reduce(data_read * (1 << np.arange(16)[:, np.newaxis]), axis=0)
+                self.unprocessed_data_batches.append(data_read)
+                if len(self.unprocessed_data_batches) >= BATCH_SIZE:
+                    # Convert each word to a 16-bit binary string, preserving leading zeros.
+                    binary_words = ["'" + format(word, '016b') for batch in self.unprocessed_data_batches for word in np.bitwise_or.reduce(batch * (1 << np.arange(16)[:, np.newaxis]), axis=0)]
+                    timestamps = [datetime.datetime.now().strftime("%M:%S.%f") for _ in range(len(binary_words))]
+               
+                    # Process the data 
+                    x, y1, y2 = self.raw2coords(binary_words)
+                    
+                    # Optional: Handle the processed data (e.g., for plotting or saving)
+                    processed_df = pd.DataFrame({'X': x, 'Y1': y1, 'Y2': y2})
+                    # You could plot here or append to a DataFrame for later use
+                    self.processed_data = pd.concat([self.processed_data, processed_df], ignore_index=True)
+                    self.process()
+                    self.unprocessed_data_batches = []
+                    # Save the raw data chunk to CSV
+                    df_chunk = pd.DataFrame(np.column_stack((timestamps, binary_words)), columns=columns)
+                    df_chunk.to_csv(filename, mode='a', header=False, index=False)
+        
+    def raw2coords(self, rawdata):
+        # Here, we strip the apostrophes before conversion
+        data = [int(word.strip("'"), 2) for word in rawdata]
+
         k = 0
         cnt = 0
         many = len(data) // 3
-        x = np.zeros(many)
-        y1 = np.zeros(many)
-        y2 = np.zeros(many)
+        x = np.zeros(many, dtype=int)
+        y1 = np.zeros(many, dtype=int)
+        y2 = np.zeros(many, dtype=int)
 
         while k <= many * 3 - 3:
             y1t = (data[k] & 0x0003) == 0x0001
@@ -121,7 +130,7 @@ class DataAcquisition:
             # Save the processed data to CSV
             processed_filename = 'processed_data.csv'  # Name of the file for processed data
             self.processed_data.to_csv(processed_filename, mode='a', header=False, index=False)
-        
+           
         
     def init_plot(self):
         """Formats the plot."""
@@ -142,51 +151,66 @@ class DataAcquisition:
         self.ax[2].tick_params(axis='y', labelsize=10)
         self.ax[2].tick_params(axis='both', length=10)
         #self.ax[2].set_title("1D Histogram")
-        # Initialize the color bar for the 2D histogram heatmap
-        if self.cbar is None:
-            self.cbar = self.fig.colorbar(self.heatmap, ax=self.ax[1])
-            self.cbar.set_label('Counts')
+        #initialize plots
+        self.scatter = self.ax[0].scatter([],[], s=1)
+        self.heatmap = self.ax[1].imshow(np.zeros((50, 50)), interpolation='nearest', origin='lower', cmap='plasma', aspect='auto')
+
+        self.hist1d = self.ax[2].bar([], [])
+    
+        # Initialize colorbar here to avoid re-creation in update_plot
+        self.cbar = self.fig.colorbar(self.heatmap, ax=self.ax[1])
         
+        return [self.scatter, self.heatmap, *self.hist1d]
+
 
 
     def update_plot(self, frame):
         """Updates the plot with new data."""
         if not self.processed_data.empty:
-            xra = self.processed_data['xra']
-            ya = self.processed_data['ya']
-            xrb = self.processed_data['xrb']
-            yb = self.processed_data['yb']
+            xra = self.processed_data['xra'].values
+            ya = self.processed_data['ya'].values
+            xrb = self.processed_data['xrb'].values
+            yb = self.processed_data['yb'].values
+            #print(xrb)
             xbins= 500
             ybins= 100 # Bins adjusted to pixel size of detector
-            self.scatter.set_offsets(np.column_stack([xra, ya]))
+            self.ax[0].clear()
+            # Update scatter plot of raw data
+            self.scatter = self.ax[0].scatter(xra, ya, s=1)
+            self.ax[1].clear()  # Clear the axis for the new heatmap
             # Update 2D histogram heatmap
-            self.ax[1].cla()  # Clear the axis for the new heatmap
-            hist, xedges, yedges, _ = self.ax[1].hist2d(xrb, yb, bins=(xbins, ybins), cmap='plasma', normed=True)
+            hist, xedges, yedges= self.ax[1].hist2d(xrb, yb, bins=(xbins, ybins), cmap='plasma')
+            self.heatmap.set_data(hist.T)
+            self.heatmap.set_extent([xedges[0], xedges[-1], yedges[0], yedges[-1]],interpolation='nearest', origin='lower', cmap='plasma', aspect='auto')
+            #self.heatmap.autoscale()
             # Update color bar
-            self.cbar = self.fig.colorbar(self.heatmap, ax=self.ax[1], format='%+2.0f dB')
-            
+            if not self.cbar:
+                self.cbar = self.fig.colorbar(self.heatmap, ax=self.ax[1])
+
+        
             # Update 1D histogram
-            self.ax[2].cla()
+            self.ax[2].clear()
             self.ax[2].hist(xrb, bins=(xbins))
             
-          
-
-    def plot(self):
-        """Sets up real-time plotting."""
-        self.ani = animation.FuncAnimation(self.fig, self.update_plot, init_func=self.init_plot, blit=True, interval=500)
-        plt.show()
 
     def run(self):
         """Run the acquisition and plotting."""
-        threading.Thread(target=self.acquire_data).start()
+        stop_thread = threading.Thread(target=self.listen_for_stop)
+        stop_thread.start()
+        data_thread = threading.Thread(target=self.acquire_data, daemon=True)
+        data_thread.start()
+
         self.plot()
+
+        stop_thread.join()
+        data_thread.join()
+        
+        
+    def plot(self):
+        """Sets up real-time plotting."""
+        self.ani = animation.FuncAnimation(self.fig, self.update_plot, init_func=self.init_plot, blit=True, interval=500, cache_frame_data=False)
+        plt.show()
 
 if __name__ == "__main__":
     daq_app = DataAcquisition()
-    daq_app.run()     
-        
-        
-        
-        
-        
-
+    daq_app.run()    
