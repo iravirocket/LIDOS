@@ -7,16 +7,17 @@ Created on Fri Mar  8 09:53:17 2024
 """
 import nidaqmx
 import datetime
+from datetime import datetime
 import threading
 import time
 import numpy as np
 import pandas as pd
-
+#import os #use this library if I want to create a file to put the data in
 from nidaqmx.constants import Edge
 
 # Create name of file to populate
-date = '02_13_24'
-identifier='dark9'
+date = datetime.now().strftime('%m_%d_%Y')
+identifier='test_acquire_class'
 # Base filenam
 base_filename = f'{date}_{identifier}'
 
@@ -24,15 +25,16 @@ class DataAcquisition:
     def __init__(self, base_filename):
         self.base_filename = base_filename
         self.filename = f'{base_filename}.csv'
-        self.stop_acquisition = False
+        self.stop_acquisition = threading.Event()
         self.columns = ['Timestamp', 'Binary Word']
         # Initialize CSV with headers
         pd.DataFrame(columns=self.columns).to_csv(self.filename, index=False)
 
     # Function to read user input in a separate thread
-    def read_user_input():
+    def read_user_input(self):
         input("Press 'Enter' to end data acquisition.")
-        stop_acquisition = True
+        self.stop_acquisition.set()
+        print("Acquisition stopping...")
     
     def take_data(self):
         with nidaqmx.Task() as task:
@@ -61,7 +63,7 @@ class DataAcquisition:
             user_input_thread.start()
         
             # Read data until the user types 'stop'
-            while not self.stop_acquisition:
+            while not self.stop_acquisition.is_set():
                 try:
                     # Read in the value of each line using the read function for each channel
                     data = np.array(task.read(number_of_samples_per_channel=num_samples))
@@ -84,10 +86,11 @@ class DataAcquisition:
                     
                 except Exception as e:
                     print(f"Error during acquisition: {e}")
-                    break
+                finally:
+                    task.stop()
         
             # Stop the task
-            task.stop()
+            #task.stop()
     def populate_csv(self):
         # Consolidate the CSV (this step ensures data integrity but may not be strictly necessary)
         try:
