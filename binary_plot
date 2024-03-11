@@ -1,0 +1,135 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Mar 27 17:08:42 2023
+
+@author: mccandlisslab
+"""
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+
+date = '02_16_24'
+identifier='dark6_gate'
+# Base filenam
+base_filename = f'{date}_{identifier}'
+
+# Specific filenames
+filename = f'{base_filename}.csv'
+
+def raw2ptsddlyyz(data):
+    k = 0
+    cnt = 0
+    many = len(data) // 3
+    x = np.zeros(many, dtype=int)
+    y1 = np.zeros(many, dtype=int)
+    y2 = np.zeros(many, dtype=int)
+
+    while k <= many * 3 - 3:
+        y1t = (data[k] & 0x0003) == 0x0001
+        y2t = (data[k+1] & 0x0003) == 0x0003
+        xt = (data[k+2] & 0x0003) == 0x0002
+
+        if xt and y1t and y2t:
+            y1[cnt] = (data[k] >> 2) & 0x3fff
+            y2[cnt] = (data[k+1] >> 2) & 0x3fff
+            x[cnt] = (data[k+2] >> 2) & 0x3fff
+            cnt += 1
+            k += 3
+        else:
+            k += 1
+
+    if cnt != 0:
+        x = x[:cnt]
+        y1 = y1[:cnt]
+        y2 = y2[:cnt]
+
+   
+
+    return x, y1, y2, 
+
+# Read the CSV file
+data_df = pd.read_csv(filename,skiprows=1, header=None)
+#binary_data = data_df[1].apply(lambda x: int(x.strip("'"), 2)).values
+binary_data = np.array([int(row.strip("'"), 2) for row in data_df[1]])
+
+# Call the raw2ptsddlyyz_py function
+x, y1, y2 = raw2ptsddlyyz(binary_data)
+scale=2
+dsize=1024*scale
+den = np.array(y1, dtype=np.int64) + np.array(y2, dtype=np.int64)
+nozero = np.where(den != 0)
+y1 = y1[nozero]
+y2 = y2[nozero]
+#x=x[nozero]
+xr = x[nozero][::-1]
+den=y1+y2
+x=(xr/4)[::-1]
+#x = ((xr / 4) - 230 * scale)[::-1]
+#y = ((dsize * (4 / 3) * y1 )/ den - (dsize / 2) * (4 / 3) + 512 * scale)
+y=y1/den         
+
+xbins= 500
+ybins= 100 # Bins adjusted to pixel size of detector
+'''x_filtered = df_filtered['x_filtered']
+y_filtered = df_filtered['y_filtered']
+x=df_unfiltered['x']
+y=df_unfiltered['y']'''
+hist, xedges, yedges = np.histogram2d(x, y,bins=(xbins, ybins))
+
+# Compute the 1D histogram for x-values
+x_hist, x_bins = np.histogram(x, bins=xbins)  
+
+# Initialize figures and axes outside the loop
+fig, (ax1, ax2, ax3) = plt.subplots(nrows=3, ncols=1, figsize=(10, 10))
+im = None
+cbar = None
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+# Plot the data with the specified aspect ratio
+#fig, ax1 = plt.subplots(figsize=(25, 10))
+ax1.plot(x, y, marker='.', linestyle='')
+#ax.set_aspect(25 / 10)
+#plt.ylim(-1, 1)
+#plt.xlim(0,2**14)
+plt.xticks(fontsize=25) 
+plt.yticks(fontsize=25)
+plt.tick_params(length=25)
+# Customize the plot (optional)
+ax1.set_xlabel("X")
+ax1.set_ylabel("Y = Y2 - Y1")
+ax1.set_title("Data Plot")
+
+
+ # 1D Projection
+
+ax3.bar(x_bins[:-1], x_hist, width=np.diff(x_bins)[0], align='edge')
+#ax3.set_xlim(0, 2000)
+ax3.set_xlabel('X', fontsize=10)
+ax3.set_ylabel('Count', fontsize=10)
+#ax3.set_title('1D Projection along X-axis', fontsize=10)
+ax3.tick_params(axis='x', labelsize=10)
+ax3.tick_params(axis='y', labelsize=10)
+ax3.tick_params(axis='both', length=10)
+#plt.pause(0.5)
+
+# 2D Histogram
+
+extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
+im = ax2.imshow(hist.T, interpolation='nearest', origin='lower', cmap='plasma', aspect='auto', extent=extent)
+if cbar is None:
+    cbar = ax2.figure.colorbar(im, ax=ax2)
+    cbar.set_label('Number of Points', rotation=270, labelpad=10)
+else:
+    cbar.update_normal(im)
+    #cbar.draw_all()
+#cbar = ax2.figure.colorbar(im, ax=ax2)
+#cbar.set_label('Number of Points', rotation=270, labelpad=15)
+#ax2.set_xlim(0, 2000)
+#ax2.set_ylim(500, 1500)
+ax2.tick_params(axis='x', labelsize=10)
+ax2.tick_params(axis='y', labelsize=10)
+ax2.tick_params(axis='both', length=10)
+
+# Display the plot
+plt.show()
+
