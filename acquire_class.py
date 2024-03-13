@@ -47,10 +47,14 @@ class DataAcquisition:
         
             # Set the sample rate and number of samples for the task
             rate =20000
-            num_samples = 10000
+            duration = 2 * 60 # 2 minutes only need this when running a finite acquisition
+            num_samples = rate * duration #use this for finite acquisition
+            #num_samples = 10000 #use this for continuous acquisition
+            
             # Set the sample rate for the task to change to continuous mode, change "finite" to "continuous"
-            task.timing.cfg_samp_clk_timing(rate=rate, samps_per_chan=num_samples, active_edge=Edge.FALLING, sample_mode=nidaqmx.constants.AcquisitionType.CONTINUOUS)
-        
+            #task.timing.cfg_samp_clk_timing(rate=rate, samps_per_chan=num_samples, active_edge=Edge.FALLING, sample_mode=nidaqmx.constants.AcquisitionType.CONTINUOUS)
+            task.timing.cfg_samp_clk_timing(rate=rate, samps_per_chan=num_samples, active_edge=Edge.FALLING, sample_mode=nidaqmx.constants.AcquisitionType.FINITE)
+
             # Export sample clock
             task.export_signals.export_signal(nidaqmx.constants.Signal.SAMPLE_CLOCK, "/Dev1/PFI5")
         
