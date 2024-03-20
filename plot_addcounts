@@ -1,0 +1,197 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Mar 27 17:08:42 2023
+
+@author: mccandlisslab
+"""
+import datetime
+from datetime import datetime
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import numpy as np
+from matplotlib.backends.backend_pdf import PdfPages
+import time
+from matplotlib.colors import Normalize, Colormap
+
+#date = datetime.now().strftime('%m_%d_%Y') #when plotting today's data
+date = '03_11_24' #to type in past date
+identifier='lamp1'
+# Base filenam
+base_filename = f'{date}_{identifier}'
+
+# Specific filenames
+filename = f'{base_filename}.csv'
+plotname = f'{base_filename}.pdf'
+
+def raw2ptsddlyyz(data, timestamps):
+    k = 0
+    cnt = 0
+    many = len(data) // 3
+    x = np.zeros(many, dtype=int)
+    y1 = np.zeros(many, dtype=int)
+    y2 = np.zeros(many, dtype=int)
+    ts = np.zeros(many, dtype = timestamps.dtype)
+    
+    while k <= many * 3 - 3:
+        y1t = (data[k] & 0x0003) == 0x0001
+        y2t = (data[k+1] & 0x0003) == 0x0003
+        xt = (data[k+2] & 0x0003) == 0x0002
+
+        if xt and y1t and y2t:
+            y1[cnt] = (data[k] >> 2) & 0x3fff
+            y2[cnt] = (data[k+1] >> 2) & 0x3fff
+            x[cnt] = (data[k+2] >> 2) & 0x3fff
+            ts[cnt] = timestamps[k+2] #use k+2 to correctly match the timestamp to the x coordinate
+            cnt += 1
+            k += 3
+        else:
+            k += 1
+    
+    if cnt != 0:
+        x = x[:cnt]
+        y1 = y1[:cnt]
+        y2 = y2[:cnt]
+        ts = ts[:cnt]
+    else:
+            ts = []
+
+   
+
+    return x, y1, y2, ts
+
+# Read the CSV file
+data_df = pd.read_csv(filename,skiprows=1, header=None)
+#binary_data = data_df[1].apply(lambda x: int(x.strip("'"), 2)).values
+binary_data = np.array([int(row.strip("'"), 2) for row in data_df[1]])
+time_data = np.array([datetime.strptime(row, '%M:%S.%f') for row in data_df[0]])
+# Normalize timestamps to start at zero and convert to seconds
+# Subtract the first timestamp from all timestamps
+normalized_time = np.array([(t - time_data[0]).total_seconds() for t in time_data])
+
+# Call the raw2ptsddlyyz_py function
+x, y1, y2, ts = raw2ptsddlyyz(binary_data, normalized_time)
+ts_array = np.array(ts)
+scale=2
+dsize=1024*scale
+den = np.array(y1, dtype=np.int64) + np.array(y2, dtype=np.int64)
+nozero = np.where(den != 0)
+y1 = y1[nozero]
+y2 = y2[nozero]
+#x=x[nozero]
+xr = x[nozero][::-1]
+ts_array = ts_array[nozero]
+den=y1+y2
+#x=(xr/4)[::-1]
+x = ((xr / 4) - 230 * scale)[::-1]
+y = ((dsize * (4 / 3) * y1 )/ den - (dsize / 2) * (4 / 3) + 512 * scale)
+#y=y1/den         
+total_counts = len(x)
+# Before calculating bins, convert ts to a NumPy array
+
+timebin = 1
+
+bins = np.arange(ts_array.min(), ts_array.max() + timebin, timebin)
+counts, _ = np.histogram(ts_array, bins=bins) #, weights=data_to_use)
+
+# Convert counts to count rate (counts per second in this case)
+count_rate = counts / timebin
+avg_rate = np.mean(count_rate) if count_rate.size > 0 else 0
+
+# Here you can add the count rate to your CSV or return it for further processing
+print(f"Average count rate: {avg_rate} counts/sec")
+
+xbins= 500
+ybins= 100 # Bins adjusted to pixel size of detector
+'''x_filtered = df_filtered['x_filtered']
+y_filtered = df_filtered['y_filtered']
+x=df_unfiltered['x']
+y=df_unfiltered['y']'''
+hist, xedges, yedges = np.histogram2d(x, y,bins=(xbins, ybins))
+
+# Compute the 1D histogram for x-values
+x_hist, x_bins = np.histogram(x, bins=xbins)  
+with PdfPages(plotname) as pdf:
+    
+    # Initialize figures and axes outside the loop
+    #fig, (ax1, ax2, ax3) = plt.subplots(nrows=3, ncols=1, figsize=(10, 15), gridspec_kw={'height_ratios': [1, 1, 1]})
+    # Create a figure and set up GridSpec
+    fig = plt.figure(figsize=(10, 15))
+    gs = gridspec.GridSpec(4, 2, width_ratios=[1, 0.05], height_ratios=[1, 1, 1, 1])
+    
+    # Create the subplots
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[1, 0])
+    ax3 = fig.add_subplot(gs[2, 0])  
+    ax4 = fig.add_subplot(gs[3, 0])
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+    # Plot the data with the specified aspect ratio
+    #fig, ax1 = plt.subplots(figsize=(25, 10))
+    ax1.scatter(x, y, marker='.', linestyle='', s=1) #if using plot instead instead of 's', use 'markersize = 1'
+    #ax.set_aspect(25 / 10)
+    ax1.set_ylim(500, 1500)
+    ax1.set_xlim(0, 2050)
+    plt.xticks(fontsize=25) 
+    plt.yticks(fontsize=25)
+    plt.tick_params(length=25)
+    # Customize the plot (optional)
+    ax1.set_xlabel("X")
+    ax1.set_ylabel("Y = Y2 - Y1")
+    ax1.set_title(base_filename)
+    
+    
+     # 1D Projection
+
+    ax3.bar(x_bins[:-1], x_hist, width=np.diff(x_bins)[0], align='edge')
+    ax3.set_xlim(0,2050)
+    ax3.set_xlabel('X', fontsize=10)
+    ax3.set_ylabel('Count', fontsize=10)
+    #ax3.set_title('1D Projection along X-axis', fontsize=10)
+    ax3.tick_params(axis='x', labelsize=10)
+    ax3.tick_params(axis='y', labelsize=10)
+    ax3.tick_params(axis='both', length=10)
+    #plt.pause(0.5)
+    
+    # 2D Histogram
+    
+    
+    cax = fig.add_subplot(gs[1, 1])
+    # Create a modified colormap from 'plasma'
+    plasma_mod = plt.cm.plasma.copy()
+    plasma_mod.set_under('white')  # Set the color for zero counts
+    
+    # Ensure that bins with zero counts are colored white
+    norm = Normalize(vmin=0.01, vmax=hist.max())  # Normalization
+    extent = [xedges[-1], xedges[0], yedges[0], yedges[-1]]
+    im = ax2.imshow(hist.T, interpolation='nearest', origin='lower', cmap=plasma_mod, norm = norm,aspect='auto', extent=extent)
+
+    cbar = fig.colorbar(im, cax=cax)
+   
+    cbar.set_label('Counts', rotation=270, labelpad=10)
+
+    ax2.set_xlim(0, 2050)
+    ax2.set_ylim(500, 1500)
+    ax2.tick_params(axis='x', labelsize=10)
+    ax2.tick_params(axis='y', labelsize=10)
+    ax2.tick_params(axis='both', length=10)
+    
+    #count rate histogram
+    if bins[:-1].size > 0 and count_rate.size > 0:
+        ax4.bar(bins[:-1], count_rate, width=1)#, align='edge')
+        ax4.set_xlabel('Time (s)')
+        ax4.set_ylabel('Count Rate (Hz)')
+        #ax4.title('Histogram of Count Rate over Time')
+        ax4.tick_params(axis='x', labelsize =10)
+        ax4.tick_params(axis='y', labelsize=10)
+        ax4.tick_params(axis='both', length=10)
+        ax4.set_xlim(left=0)
+        ax4.set_ylim(bottom= 0, top = 30)
+    else:
+        print("Empty bins or count_rate, skipping plot.")
+ 
+    # Display the plot
+    plt.show()
+    pdf.savefig(fig)
+
+
+
