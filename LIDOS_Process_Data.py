@@ -15,21 +15,34 @@ import numpy as np
 from matplotlib.backends.backend_pdf import PdfPages
 import time
 from matplotlib.colors import Normalize, Colormap
-
-
+import os
 
 #date = datetime.now().strftime('%m_%d_%Y') #when plotting today's data
-date = '03_11_24' #to type in past date
-identifier='lamp1'
-# Base filenam
+directory_date = '02_08_24'
+date = '02_08_24' #to type in past date
+identifier='lamp2000'
+
+# Constructing directory path
+base_dir = os.path.join(directory_date)
+
+# Form the base filename
 base_filename = f'{date}_{identifier}'
 
 # Specific filenames
-filename = f'{base_filename}.csv'
-savefile = f'{base_filename}_processed.csv'
+filename = os.path.join(base_dir, f'{base_filename}.csv')
+savefile = os.path.join(base_dir, f'{base_filename}_processed.csv')
 
-# Create an empty DataFrame to store the time and 2-byte word
-columns = ['Timestamp','x_raw', 'y_raw', 'x_new', 'xr', 'xwave', 'y', 'den', 'y1', 'y2']
+
+# Data file construction
+#data_file = f'{base_filename}.csv'
+
+
+# Specific filenames
+#filename = f'{base_filename}.csv'
+#savefile = f'{base_filename}_processed.csv'
+
+# Create an empty DataF,,rame to store the time and 2-byte word
+columns = ['Timestamp','x_raw', 'y_raw', 'xr', 'x_scale', 'y', 'den', 'y1', 'y2']
 df = pd.DataFrame(columns=columns)
 
 
@@ -86,9 +99,7 @@ scale=2
 dsize=1024*scale
 den = np.array(y1, dtype=np.int64) + np.array(y2, dtype=np.int64)
 nozero = np.where(den != 0)
-y1 = y1[nozero]
-y2 = y2[nozero]
-x=x[nozero]
+x, y1, y2, ts_array = [arr[nozero] for arr in [x, y1, y2, ts_array]]
 x_min, x_max = 0, 2048
 
 
@@ -97,10 +108,10 @@ den=y1+y2
 #xr=(x_raw/4)[::-1]
 x_new = ((x / 4) - 230 * scale)#[::-1]
 mask = (x_new >= x_min) & (x_new <= x_max)
-x_new =x_new[mask]
+x, y1, y2, ts_array, x_new= [arr[mask] for arr in [x, y1, y2, ts_array, x_new]]
+den=y1+y2
 xr = x_max + x_min - x_new
 xscale = xr/(2.925714286)
-xwave = xr + 950
 y = ((dsize * (4 / 3) * y1 )/ den - (dsize / 2) * (4 / 3) + 512 * scale)
 y_raw=y1/den         
 total_counts = len(x)
@@ -115,7 +126,7 @@ counts, _ = np.histogram(ts_array, bins=bins) #, weights=data_to_use)
 count_rate = counts / timebin
 avg_rate = np.mean(count_rate) if count_rate.size > 0 else 0
 
-df = pd.DataFrame(np.column_stack((ts_array, x, y_raw,x_new, xr, xwave, y, den,y1, y2)), columns=columns)
+df = pd.DataFrame(np.column_stack((ts_array, x, y_raw, xr, xscale, y, den,y1, y2)), columns=columns)
 
 df.to_csv(savefile, header=True, float_format='%.2f', index=False)
 
