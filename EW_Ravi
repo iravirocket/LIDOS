@@ -1,0 +1,213 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from astropy import units as u
+from astropy.modeling.models import Linear1D
+from astropy.modeling.fitting import LinearLSQFitter
+from specutils import Spectrum1D
+from specutils import SpectralRegion
+from specutils.analysis import equivalent_width
+from scipy.integrate import simps
+import os
+from scipy.signal import find_peaks
+
+class SpectrumAnalyzer:
+    def __init__(self, lamp_file, dark_file, cell_file):
+        self.df_lamp = pd.read_csv(lamp_file)
+        self.df_darkf = pd.read_csv(dark_file)
+        self.df_cell = pd.read_csv(cell_file)
+        self.integration_time = np.max(self.df_lamp['Timestamp']) # seconds
+        self.bandpass = 1650 - 900  # Angstroms
+        self.avg_dark = self.df_darkf['y'].mean()
+        self.guessed_Angstroms = [1215.67, 1304, 1334, 1200]
+        self.guessed_pixels_index = []
+        
+    def preprocess_data(self):
+        self.xr_lamp = self.df_lamp['xr']
+        self.y_lamp = self.df_lamp['y'] - self.avg_dark
+        self.xr_darkf = self.df_darkf['xr']
+        self.y_darkf = self.df_darkf['y']
+        self.xr_cell = self.df_cell['xr']
+        self.y_cell = self.df_cell['y'] - self.avg_dark
+
+        # Filter data
+        y_cut_min, y_cut_max = 660, 1300
+        self.filtered_lamp = self.df_lamp[(self.df_lamp['y'] >= y_cut_min) & (self.df_lamp['y'] <= y_cut_max)]
+        self.filtered_darkf = self.df_darkf[(self.df_darkf['y'] >= y_cut_min) & (self.df_darkf['y'] <= y_cut_max)]
+        self.filtered_cell = self.df_cell[(self.df_cell['y'] >= y_cut_min) & (self.df_cell['y'] <= y_cut_max)]
+
+        # Group and sum counts
+        self.lamp_counts = self.filtered_lamp.groupby('xr')['y'].sum().reset_index()
+        self.darkf_counts = self.filtered_darkf.groupby('xr')['y'].sum().reset_index()
+        self.cell_counts = self.filtered_cell.groupby('xr')['y'].sum().reset_index()
+
+        # Update values
+        self.xr_lamp = self.lamp_counts['xr'].values
+        self.y_lamp = self.lamp_counts['y'].values - self.avg_dark
+        self.xr_darkf = self.darkf_counts['xr'].values
+        self.y_darkf = self.darkf_counts['y'].values
+        self.xr_cell = self.cell_counts['xr'].values
+        self.y_cell = self.cell_counts['y'].values - self.avg_dark
+
+    def calibrate_wavelength(self):
+        px1 = np.where(np.isclose(self.xr_lamp, 831, atol=1))[0][0]
+        px2 = np.where(np.isclose(self.xr_lamp, 1076, atol=3))[0][0]
+        px3 = np.where(np.isclose(self.xr_lamp, 1171, atol=5))[0][0]
+        px4 = np.where(np.isclose(self.xr_lamp, 788, atol= 3)) [0][0]
+        self.guessed_pixels_index = [px1, px2, px3, px4]
+        
+        npixels = 30
+        improved_xval_guesses = [np.average(self.xr_lamp[g-npixels:g+npixels], 
+                                            weights=self.y_lamp[g-npixels:g+npixels]) 
+                                 for g in self.guessed_pixels_index]
+
+        linfitter = LinearLSQFitter()
+        wlmodel = Linear1D()
+        self.linfit_wlmodel = linfitter(model=wlmodel, x=self.xr_lamp[self.guessed_pixels_index], y=self.guessed_Angstroms)
+        self.lamda_lamp = self.linfit_wlmodel(self.xr_lamp)
+        self.lamda_cell = self.linfit_wlmodel(self.xr_cell)
+        self.lamda_darkf = self.linfit_wlmodel(self.xr_darkf)
+        
+    def plot_data(self, save_path):
+        fig, (ax1, ax2, ax3) = plt.subplots(nrows=3, ncols=1, figsize=(10, 10))
+        ax1.plot(self.xr_lamp, self.y_lamp, ls='-', markersize=3.5, label='Source')
+        ax1.plot(self.xr_cell, self.y_cell, ls='-', markersize=3.5, label='Cell')
+        for x in self.xr_lamp[self.guessed_pixels_index]:
+            ax1.axvline(x=x, label='Identified Peaks', color='red', linestyle='--', linewidth=0.5)
+        ax1.set_xlabel('Pixels')
+        ax1.set_ylabel('Counts * s-1 *AA-1')
+        ax1.set_title('Plots for Lamp and Cell')
+        ax1.legend()
+
+        ax2.plot(self.lamda_lamp, self.y_lamp, 'o-', markersize=.5, label='Source')
+        ax2.plot(self.lamda_cell, self.y_cell, 'o-', markersize=.5, label='Cell')
+        ax2.plot(self.guessed_Angstroms, [2600]*4, 'x', label='Identified Peaks')
+        ax2.set_xlabel('Angstroms')
+        ax2.set_ylabel('Counts * s-1 *AA-1')
+        ax2.legend()
+
+        ax3.plot(self.lamda_lamp, self.y_lamp, 'o-', label='Source')
+        ax3.plot(self.lamda_cell, self.y_cell, 'o-', label='Cell')
+        for x in self.guessed_Angstroms:
+            ax3.axvline(x=x, label='Identified Peaks', color='red', linestyle='--', linewidth=0.5)
+        ax3.set_xlabel('Angstroms')
+        ax3.set_ylabel('Counts * s-1 *AA-1')
+        ax3.set_xlim(1211, 1220)
+        ax3.legend()
+
+        fig.savefig(save_path)
+        
+    def bin_data(self, lamda, y, new_spacing=0.35):
+        start_point = lamda.min()
+        end_point = lamda.max()
+        num_bins = int(np.ceil((end_point - start_point) / new_spacing))
+        bin_sums = np.zeros(num_bins)
+        x_bin = []
+        for i in range(num_bins):
+            bin_start = start_point + i * new_spacing
+            bin_end = bin_start + new_spacing
+            points_in_bin = y[(lamda >= bin_start) & (lamda < bin_end)]
+            x_bin.append(bin_start)
+            bin_sums[i] = np.sum(points_in_bin)
+
+        bin_sums = np.clip(bin_sums, a_min=0.01, a_max=None)
+        return x_bin, bin_sums
+    '''
+    def find_EW(self, window_start, window_end, lamda, y):
+        data = y[window_start:window_end]
+        wav = lamda[window_start:window_end]
+        spec = data / max(data)
+
+        plt.figure()
+        plt.plot(wav, spec, 'o-')
+        plt.hlines(y=min(spec), xmin=min(wav), xmax=max(wav), color='red', linestyle='--')
+        plt.grid()
+        plt.title('EW')
+        plt.xlabel('Wavelength (AA)')
+        plt.ylabel('Normalized Counts s-1 AA-1')
+
+        spec1 = Spectrum1D(spectral_axis=wav*u.AA, flux=spec*u.Unit('erg cm-2 s-1 AA-1'))
+        EW = equivalent_width(spec1, continuum=min(spec)*u.Unit('erg cm-2 s-1 AA-1'), 
+                              regions=SpectralRegion(min(wav)*u.AA, max(wav)*u.AA))
+
+        a = (min(data) - data) / min(data)
+        I0 = simps(data, wav)
+        EW_2 = simps(a, wav)
+
+        return EW * -1, EW_2 * -1, I0
+        '''
+    def find_EW(self, lamda, y):
+        # Find peaks to determine the central wavelength of the spectral line
+        peaks, _ = find_peaks(y, height=max(y)*0.5)  # Adjust the height threshold as needed
+        if len(peaks) == 0:
+            raise ValueError("No peaks found in the data.")
+        
+        peak_index = peaks[0]  # Assuming the first peak is the line of interest
+        
+        # Define the window around the peak
+        window_width = 10  # Adjust the window width as needed
+        window_start = max(0, peak_index - window_width)
+        window_end = min(len(lamda), peak_index + window_width)
+
+        data = y[window_start:window_end]
+        wav = lamda[window_start:window_end]
+        spec = data / max(data)
+
+        plt.figure()
+        plt.plot(wav, spec, 'o-')
+        plt.hlines(y=min(spec), xmin=min(wav), xmax=max(wav), color='red', linestyle='--')
+        plt.grid()
+        plt.title('Normalized Y-axis to find EW')
+        plt.xlabel('Wavelength (AA)')
+        plt.ylabel('Normalized Counts s-1 AA-1')
+
+        spec1 = Spectrum1D(spectral_axis=wav*u.AA, flux=spec*u.Unit('erg cm-2 s-1 AA-1'))
+        EW = equivalent_width(spec1, continuum=min(spec)*u.Unit('erg cm-2 s-1 AA-1'), 
+                              regions=SpectralRegion(min(wav)*u.AA, max(wav)*u.AA))
+
+        a = (min(data) - data) / min(data)
+        I0 = simps(data, wav)
+        EW_2 = simps(a, wav)
+
+        return EW * -1, EW_2 * -1, I0
+        
+    def analyze(self, save_path):
+        self.preprocess_data()
+        self.calibrate_wavelength()
+        self.plot_data(save_path)
+
+        x_bin, bin_sums = self.bin_data(self.lamda_lamp, self.y_lamp)
+        x_cell, cell_sum = self.bin_data(self.lamda_cell, self.y_cell)
+
+        #lamp_window_start = np.where(np.isclose(x_bin, 1213.5, atol=0.2))[0][0]
+        #lamp_window_end = np.where(np.isclose(x_bin, 1218.5, atol=0.2))[0][0]
+        #cell_window_start = np.where(np.isclose(x_cell, 1213.5, atol=0.3))[0][0]
+        #cell_window_end = np.where(np.isclose(x_cell, 1218.5, atol=0.3))[0][0]
+
+        EW_lamp, EW_2_lamp, I0_lamp = self.find_EW(x_bin, bin_sums)
+        EW_cell, EW_2_cell, I0_cell = self.find_EW(x_cell, cell_sum)
+
+        transmission = EW_cell / EW_lamp
+        optical_depth = -np.log(transmission)
+
+        print(f"Equivalent Width (Lamp): {EW_lamp}")
+        print(f"Equivalent Width (Cell): {EW_cell}")
+        print(f"Transmission: {transmission}")
+        print(f"Optical Depth: {optical_depth}")
+
+# Usage
+directory_date = '05_11_2024'
+sub_directory = 'Processed'
+date = '05_11_2024'
+base_dir = os.path.join(directory_date)
+sub_dir = os.path.join(sub_directory)
+id_lamp = 'lamp_og_7A'
+id_filament_dark = 'darkf_5A_2T'
+id_cell = 'cell_og_7A'
+
+lamp_filename = os.path.join(base_dir, sub_dir, f'{date}_{id_lamp}_processed.csv')
+filament_dark_filename = os.path.join(base_dir, sub_dir, f'{date}_{id_filament_dark}_processed.csv')
+cell_filename = os.path.join(base_dir, sub_dir, f'{date}_{id_cell}_processed.csv')
+
+analyzer = SpectrumAnalyzer(lamp_filename, filament_dark_filename, cell_filename)
+analyzer.analyze('calibration_plot.png')
