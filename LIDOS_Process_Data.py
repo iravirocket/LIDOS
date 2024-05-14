@@ -17,32 +17,34 @@ import time
 from matplotlib.colors import Normalize, Colormap
 import os
 
+
 #date = datetime.now().strftime('%m_%d_%Y') #when plotting today's data
-directory_date = '02_08_24'
-date = '02_08_24' #to type in past date
-identifier='lamp2000'
+directory_date = '05_13_2024'
+identifier='cell_long_5A'
 
 # Constructing directory path
 base_dir = os.path.join(directory_date)
 
+# Make new directory for processed data
+processed_dir = os.path.join(base_dir, 'Processed')
+os.makedirs(processed_dir)
+
 # Form the base filename
-base_filename = f'{date}_{identifier}'
+base_filename = f'{directory_date}_{identifier}'
 
-# Specific filenames
-filename = os.path.join(base_dir, f'{base_filename}.csv')
-savefile = os.path.join(base_dir, f'{base_filename}_processed.csv')
+# Specific filenames uncomment to process only one file
+#filename = os.path.join(base_dir, f'{base_filename}.csv')
+#filenames = [filename]
+
+# Uncomment the following line to process all CSV files in the directory
+filenames = [os.path.join(base_dir, f) for f in os.listdir(base_dir) if f.endswith('.csv')]
 
 
-# Data file construction
-#data_file = f'{base_filename}.csv'
+#savefile = os.path.join(base_dir, f'{base_filename}_processed.csv')
 
-
-# Specific filenames
-#filename = f'{base_filename}.csv'
-#savefile = f'{base_filename}_processed.csv'
 
 # Create an empty DataF,,rame to store the time and 2-byte word
-columns = ['Timestamp','x_raw', 'y_raw', 'xr', 'x_scale', 'y', 'den', 'y1', 'y2']
+columns = ['Timestamp','x_raw', 'y_raw', 'xr', 'xscale', 'y', 'den', 'y1', 'y2']
 df = pd.DataFrame(columns=columns)
 
 
@@ -82,68 +84,69 @@ def raw2ptsddlyyz(data, timestamps):
 
     return x, y1, y2, ts
 
-# Read the CSV file
-data_df = pd.read_csv(filename,skiprows=1, header=None)
-#binary_data = data_df[1].apply(lambda x: int(x.strip("'"), 2)).values
-binary_data = np.array([int(row.strip("'"), 2) for row in data_df[1]])
-time_data = np.array([datetime.strptime(row, '%M:%S.%f') for row in data_df[0]])
-# Normalize timestamps to start at zero and convert to seconds
-# Subtract the first timestamp from all timestamps
-normalized_time = np.array([(t - time_data[0]).total_seconds() for t in time_data])
-
-#precise_time = [f"{t:.6g}" for t in normalized_time]
-# Call the raw2ptsddlyyz_py function
-x,y1, y2, ts = raw2ptsddlyyz(binary_data, normalized_time)
-ts_array = np.array(ts)
-scale=2
-dsize=1024*scale
-den = np.array(y1, dtype=np.int64) + np.array(y2, dtype=np.int64)
-nozero = np.where(den != 0)
-x, y1, y2, ts_array = [arr[nozero] for arr in [x, y1, y2, ts_array]]
-x_min, x_max = 0, 2048
-
-
-ts_array = ts_array[nozero]
-den=y1+y2
-#xr=(x_raw/4)[::-1]
-x_new = ((x / 4) - 230 * scale)#[::-1]
-mask = (x_new >= x_min) & (x_new <= x_max)
-x, y1, y2, ts_array, x_new= [arr[mask] for arr in [x, y1, y2, ts_array, x_new]]
-den=y1+y2
-xr = x_max + x_min - x_new
-xscale = xr/(2.925714286)
-y = ((dsize * (4 / 3) * y1 )/ den - (dsize / 2) * (4 / 3) + 512 * scale)
-y_raw=y1/den         
-total_counts = len(x)
-# Before calculating bins, convert ts to a NumPy array
-
-timebin = 1
-
-bins = np.arange(ts_array.min(), ts_array.max() + timebin, timebin)
-counts, _ = np.histogram(ts_array, bins=bins) #, weights=data_to_use)
-
-# Convert counts to count rate (counts per second in this case)
-count_rate = counts / timebin
-avg_rate = np.mean(count_rate) if count_rate.size > 0 else 0
-
-df = pd.DataFrame(np.column_stack((ts_array, x, y_raw, xr, xscale, y, den,y1, y2)), columns=columns)
-
-df.to_csv(savefile, header=True, float_format='%.2f', index=False)
-
-
-fig = plt.figure(figsize=(10, 15))
-
-ax1 = fig.add_subplot()
-ax1.scatter(xr, y, marker='.', linestyle='', s=1) #if using plot instead instead of 's', use 'markersize = 1'
-#ax.set_aspect(25 / 10)
-ax1.set_ylim(500, 1500)
-#ax1.set_xlim(0, 2050)
-plt.xticks(fontsize=25) 
-plt.yticks(fontsize=25)
-plt.tick_params(length=25)
-# Customize the plot (optional)
-ax1.set_xlabel("X")
-ax1.set_ylabel("Y = Y2 - Y1")
-ax1.set_title(base_filename)
-
-plt.show
+for filename in filenames:
+    savefile = os.path.join(processed_dir,f'{os.path.splitext(os.path.basename(filename))[0]}_processed.csv' )
+    # Read the CSV file
+    data_df = pd.read_csv(filename,skiprows=1, header=None)
+    #binary_data = data_df[1].apply(lambda x: int(x.strip("'"), 2)).values
+    binary_data = np.array([int(row.strip("'"), 2) for row in data_df[1]])
+    time_data = np.array([datetime.strptime(row, '%M:%S.%f') for row in data_df[0]])
+    # Normalize timestamps to start at zero and convert to seconds
+    # Subtract the first timestamp from all timestamps
+    normalized_time = np.array([(t - time_data[0]).total_seconds() for t in time_data])
+    
+    #precise_time = [f"{t:.6g}" for t in normalized_time]
+    # Call the raw2ptsddlyyz_py function
+    x,y1, y2, ts = raw2ptsddlyyz(binary_data, normalized_time)
+    ts_array = np.array(ts)
+    scale=2
+    dsize=1024*scale
+    den = np.array(y1, dtype=np.int64) + np.array(y2, dtype=np.int64)
+    nozero = np.where(den != 0)
+    x, y1, y2, ts_array = [arr[nozero] for arr in [x, y1, y2, ts_array]]
+    
+    x_min, x_max = 0, 2048
+    
+    #xr=(x_raw/4)[::-1]
+    x_new = ((x / 4) - 230 * scale)#[::-1]
+    mask = (x_new >= x_min) & (x_new <= x_max)
+    x, y1, y2, ts_array, x_new= [arr[mask] for arr in [x, y1, y2, ts_array, x_new]]
+    den=y1+y2
+    xr = x_max + x_min - x_new
+    xscale = xr/(2.925714286)
+    y = ((dsize * (4 / 3) * y1 )/ den - (dsize / 2) * (4 / 3) + 512 * scale)
+    y_raw=y1/den         
+    total_counts = len(x)
+    
+    
+    timebin = 1
+    
+    bins = np.arange(ts_array.min(), ts_array.max() + timebin, timebin)
+    counts, _ = np.histogram(ts_array, bins=bins) #, weights=data_to_use)
+    
+    # Convert counts to count rate (counts per second in this case)
+    count_rate = counts / timebin
+    avg_rate = np.mean(count_rate) if count_rate.size > 0 else 0
+    
+    df = pd.DataFrame(np.column_stack((ts_array, x, y_raw, xr, xscale,  y, den,y1, y2)), columns=columns)
+    
+    df.to_csv(savefile, header=True, float_format='%.2f', index=False)
+    
+    '''
+    fig = plt.figure(figsize=(10, 15))
+    
+    ax1 = fig.add_subplot()
+    ax1.scatter(xr, y, marker='.', linestyle='', s=1) #if using plot instead instead of 's', use 'markersize = 1'
+    #ax.set_aspect(25 / 10)
+    #ax1.set_ylim(500, 1500)
+    #ax1.set_xlim(0, 2050)
+    plt.xticks(fontsize=25) 
+    plt.yticks(fontsize=25)
+    plt.tick_params(length=25)
+    # Customize the plot (optional)
+    ax1.set_xlabel("X")
+    ax1.set_ylabel("Y = Y2 - Y1")
+    ax1.set_title(base_filename)
+    
+    plt.show
+    '''
