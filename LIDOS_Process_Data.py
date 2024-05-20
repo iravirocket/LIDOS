@@ -19,15 +19,15 @@ import os
 
 
 #date = datetime.now().strftime('%m_%d_%Y') #when plotting today's data
-directory_date = '05_13_2024'
-identifier='cell_long_5A'
+directory_date = '02_08_24'
+identifier='cell_3.5A_2T_4'
 
 # Constructing directory path
 base_dir = os.path.join(directory_date)
 
 # Make new directory for processed data
 processed_dir = os.path.join(base_dir, 'Processed')
-os.makedirs(processed_dir)
+#os.makedirs(processed_dir)
 
 # Form the base filename
 base_filename = f'{directory_date}_{identifier}'
