@@ -19,7 +19,7 @@ class SpectrumAnalyzer:
         self.integration_time = np.max(self.df_lamp['Timestamp']) # seconds
         self.bandpass = 1650 - 900  # Angstroms
         self.avg_dark = self.df_darkf['y'].mean()
-        self.guessed_Angstroms =  [1492.6, 1304, 1334, 1200]
+        self.guessed_Angstroms =  [1492.6, 1304, 1334, 1200.2]
         self.guessed_pixels_index = []
         
     def preprocess_data(self):
@@ -31,7 +31,7 @@ class SpectrumAnalyzer:
         self.y_cell = self.df_cell['y'] - self.avg_dark
 
         # Filter data
-        y_cut_min, y_cut_max = 660, 1300
+        y_cut_min, y_cut_max = 1000, 1200 #660, 1300
         self.filtered_lamp = self.df_lamp[(self.df_lamp['y'] >= y_cut_min) & (self.df_lamp['y'] <= y_cut_max)]
         self.filtered_darkf = self.df_darkf[(self.df_darkf['y'] >= y_cut_min) & (self.df_darkf['y'] <= y_cut_max)]
         self.filtered_cell = self.df_cell[(self.df_cell['y'] >= y_cut_min) & (self.df_cell['y'] <= y_cut_max)]
@@ -55,25 +55,29 @@ class SpectrumAnalyzer:
         
         self.y_cell = self.cell_counts['y'].values - self.avg_dark
         self.y_cell = np.clip(self.y_cell, a_min=0.001, a_max=None)
+    
+    
         
         return self.xr_lamp,self.xr_cell
     
     def calibrate_wavelength(self):
-        px1 = np.where(np.isclose(self.xr_lamp, 1620, atol=2))[0][0]
-        px2 = np.where(np.isclose(self.xr_lamp, 1050, atol=2))[0][0]
-        px3 = np.where(np.isclose(self.xr_lamp, 1190, atol=2))[0][0]
-        px4 = np.where(np.isclose(self.xr_lamp, 782, atol= 2)) [0][0]
+        
+        px1 = np.where(np.isclose(self.xr_lamp, 1627, atol=1))[0][0]
+        px2 = np.where(np.isclose(self.xr_lamp, 1082, atol=1))[0][0]
+        px3 = np.where(np.isclose(self.xr_lamp, 1178, atol=1))[0][0]
+        px4 = np.where(np.isclose(self.xr_lamp, 795, atol= 1)) [0][0]
         self.guessed_pixels_index = [px1, px2, px3, px4]
         
-        npixels = 30
+        npixels = 10
         self.improved_xval_guesses = [np.average(self.xr_lamp[g-npixels:g+npixels], 
                                             weights=self.y_lamp[g-npixels:g+npixels]) 
                                 for g in self.guessed_pixels_index]
         print(self.improved_xval_guesses)
+        
         linfitter = LinearLSQFitter()
         wlmodel = Linear1D()
-        #self.linfit_wlmodel = linfitter(model=wlmodel, x=self.improved_xval_guesses, y=self.guessed_Angstroms)
-        self.linfit_wlmodel = Linear1D(slope=0.3499, intercept=925)
+        self.linfit_wlmodel = linfitter(model=wlmodel, x=self.improved_xval_guesses, y=self.guessed_Angstroms)
+        #self.linfit_wlmodel = Linear1D(slope=0.349, intercept=925.9)
         
         self.lamda_lamp = self.linfit_wlmodel(self.xr_lamp)
         self.lamda_cell = self.linfit_wlmodel(self.xr_cell)
@@ -89,7 +93,7 @@ class SpectrumAnalyzer:
         ax1.set_xlabel('Pixels')
         ax1.set_ylabel('Counts * s-1 *AA-1')
         ax1.set_title('Plots for Lamp and Cell')
-        ax1.legend()
+        #ax1.legend()
 
         ax2.plot(self.lamda_lamp, self.y_lamp, 'o-', markersize=.5, label='Source')
         ax2.plot(self.lamda_cell, self.y_cell, 'o-', markersize=.5, label='Cell')
@@ -99,7 +103,7 @@ class SpectrumAnalyzer:
         ax2.axvline(x=1215.67, label='LyAlpha', color='green', linestyle='--', linewidth=0.5)
         ax2.set_xlabel('Angstroms')
         ax2.set_ylabel('Counts * s-1 *AA-1')
-        ax2.legend()
+        #ax2.legend()
 
         ax3.plot(self.lamda_lamp, self.y_lamp, 'o-', label='Source')
         ax3.plot(self.lamda_cell, self.y_cell, 'o-', label='Cell')
@@ -107,9 +111,9 @@ class SpectrumAnalyzer:
             ax3.axvline(x=x, label='Identified Peaks', color='red', linestyle='--', linewidth=0.5)
         ax3.set_xlabel('Angstroms')
         ax3.set_ylabel('Counts * s-1 *AA-1')
-        #ax3.set_xlim(1198,1205)
-        ax3.set_xlim(1490,1500)
-        ax3.legend()
+        ax3.set_xlim(1198,1205)
+        #ax3.set_xlim(1490,1500)
+        #ax3.legend()
         
         ax4.plot(self.lamda_lamp, self.y_lamp, 'o-', label='Source')
         ax4.plot(self.lamda_cell, self.y_cell, 'o-', label='Cell')
@@ -117,8 +121,8 @@ class SpectrumAnalyzer:
         ax4.axvline(x=1215.67, label='Rest LyAlpha', color='green', linestyle='--', linewidth=0.5)
         ax4.set_xlabel('Angstroms')
         ax4.set_ylabel('Counts * s-1 *AA-1')
-        ax4.set_xlim(1213,1219.5)
-        ax4.legend()
+        ax4.set_xlim(1210,1219.5)
+        #ax4.legend()
 
         fig.savefig(save_path)
         
@@ -144,16 +148,22 @@ class SpectrumAnalyzer:
     
     def find_EW(self):
         
-        lamp_window_start = np.where(np.isclose(self.lamda_lamp, 1213.5, atol=0.7))[0][0]
+        lamp_window_start = np.where(np.isclose(self.lamda_lamp, 1210, atol=0.7))[0][0]
         lamp_window_end = np.where(np.isclose(self.lamda_lamp, 1220, atol=1))[0][0]
-        cell_window_start = np.where(np.isclose(self.lamda_cell, 1213.5, atol=0.7))[0][0]
+        cell_window_start = np.where(np.isclose(self.lamda_cell, 1210, atol=0.7))[0][0]
         cell_window_end = np.where(np.isclose(self.lamda_cell, 1220, atol=1))[0][0]
-               
         
-        data_l = self.y_lamp[lamp_window_start:lamp_window_end]
+        integration_time = 200
+        effective_area = 7.3644e-05
+        solid_angle = (.0025 * .5)/28**2
+        window_size = 10
+        energy = 2.2e-6 #energy of lyman alpha photon in ergs
+        counts_to_flux = energy / (effective_area * integration_time * window_size)
+        
+        data_l = self.y_lamp[lamp_window_start:lamp_window_end] * counts_to_flux
         wav_l = self.lamda_lamp[lamp_window_start:lamp_window_end]
         print(data_l)
-        data_cell = self.y_cell[cell_window_start:cell_window_end]
+        data_cell = self.y_cell[cell_window_start:cell_window_end] * counts_to_flux
         wav_cell = self.lamda_cell[cell_window_start:cell_window_end]
         
         norm_data_lamp = data_l / max(data_l)
@@ -176,6 +186,10 @@ class SpectrumAnalyzer:
         acell = (min(data_cell) - data_cell) / min(data_cell)
         I_cell = simps(data_cell, wav_cell)
         EW_2cell = simps(acell, wav_cell)
+        
+        rayleigh_conversion = 1e6 / (4* np.pi * solid_angle)
+        I0_rayleighs = I0 * rayleigh_conversion
+        Icell_rayleighs = I_cell * rayleigh_conversion
 
         '''
         plt.figure()
@@ -187,7 +201,7 @@ class SpectrumAnalyzer:
         plt.ylabel('Normalized Counts s-1 AA-1')
         '''
         
-        return -1*EW_l, EW_cell*-1, -1*EW_2L, -1* EW_2cell, I0, I_cell
+        return -1*EW_l, EW_cell*-1, -1*EW_2L, -1* EW_2cell, I0, I_cell, I0_rayleighs, Icell_rayleighs
     
     '''   
     def find_EW(self, lamda, y):
@@ -230,10 +244,10 @@ class SpectrumAnalyzer:
         self.calibrate_wavelength()
         self.plot_data(save_path)
 
-        #x_bin, bin_sums = self.bin_data(self.lamda_lamp, self.y_lamp)
-        #x_cell, cell_sum = self.bin_data(self.lamda_cell, self.y_cell)
+        x_bin, bin_sums = self.bin_data(self.lamda_lamp, self.y_lamp)
+        x_cell, cell_sum = self.bin_data(self.lamda_cell, self.y_cell)
 
-        EW_lamp1, EW_cell1, EW_lamp2,EW_cell2, I0_lamp, I0_cell = self.find_EW()
+        EW_lamp1, EW_cell1, EW_lamp2,EW_cell2, I0_lamp, I0_cell, I0_rayleighs, Icell_rayleighs = self.find_EW()
     
         #EW_lamp, EW_2_lamp, I0_lamp = self.find_EW(lamp_window_start, lamp_window_end, self.lamda_lamp, norm_data_lamp)
         #EW_cell, EW_2_cell, I0_cell = self.find_EW(cell_window_start, cell_window_end, self.lamda_cell, norm_data_cell)
@@ -248,18 +262,20 @@ class SpectrumAnalyzer:
         print(f"Transmission: {transmission}")
         print(f"Optical Depth: {optical_depth}")
         print(f"Transmission Intensity: {transmission_intensity}")
-        print(f"Intensity Cell: {I0_cell}")
-        print(f"Intensity Lamp: {I0_lamp}")
+        print(f"Intensity Cell: {I0_cell} erg/cm^2 s")
+        print(f"Intensity Lamp: {I0_lamp} erg/cm^2 s")
+        print(f"Rayleigh Lamp: {I0_rayleighs}")
+        print(f"Rayleigh Cell: {Icell_rayleighs}")
         return xl,xc
 # Usage
-directory_date = '05_15_2024_2'
+directory_date = '05_24_2024'
 sub_directory = 'Processed'
-date = '05_15_2024'
+date = '05_24_2024'
 base_dir = os.path.join(directory_date)
 sub_dir = os.path.join(sub_directory)
-id_lamp = 'lamp_3.5A_2T_7'
-id_filament_dark = 'darkf_3.5A_2T'
-id_cell = 'cell_3.5A_2T_7'
+id_lamp = 'lamp_2.75V_2T'
+id_filament_dark = 'darkf_3.25V_1T'
+id_cell = 'cell_2.75V_2T'
 
 lamp_filename = os.path.join(base_dir, sub_dir, f'{date}_{id_lamp}_processed.csv')
 filament_dark_filename = os.path.join(base_dir, sub_dir, f'{date}_{id_filament_dark}_processed.csv')
