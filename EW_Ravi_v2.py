@@ -191,7 +191,7 @@ class SpectrumAnalyzer:
         I0_rayleighs = I0 * rayleigh_conversion
         Icell_rayleighs = I_cell * rayleigh_conversion
 
-        '''
+        
         plt.figure()
         plt.plot(wav, spec, 'o-')
         plt.hlines(y=min(spec), xmin=min(wav), xmax=max(wav), color='red', linestyle='--')
@@ -199,7 +199,7 @@ class SpectrumAnalyzer:
         plt.title('EW')
         plt.xlabel('Wavelength (AA)')
         plt.ylabel('Normalized Counts s-1 AA-1')
-        '''
+        
         
         return -1*EW_l, EW_cell*-1, -1*EW_2L, -1* EW_2cell, I0, I_cell, I0_rayleighs, Icell_rayleighs
     
