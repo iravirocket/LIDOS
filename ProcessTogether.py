@@ -74,6 +74,8 @@ class ProcessTogether:
             lamp_hist_1d = np.sum(lamp_hist, axis=1)
         else:
             lamp_hist = np.zeros((xbins, ybins))
+            lamp_hist_1d = np.zeros(xbins)
+
 
         if self.df_cell is not None:
             self.df_cell['xr'] = np.round(self.df_cell['xr']).astype(int)
@@ -84,6 +86,8 @@ class ProcessTogether:
             cell_hist_1d = np.sum(cell_hist, axis=1)
         else:
             cell_hist = np.zeros((xbins, ybins))
+            cell_hist_1d = np.zeros(xbins)
+
 
         if self.df_dark is not None:
             self.df_dark['xr'] = np.round(self.df_dark['xr']).astype(int)
@@ -94,6 +98,8 @@ class ProcessTogether:
             dark_hist_1d = np.sum(dark_hist, axis=1)
         else:
             dark_hist = np.zeros((xbins, ybins))
+            dark_hist_1d = np.zeros(xbins)
+
 
         return lamp_hist, cell_hist, dark_hist, xedges, yedges, lamp_hist_1d, cell_hist_1d, dark_hist_1d
     
@@ -101,22 +107,25 @@ class ProcessTogether:
     def plot_1d_histograms(self, lamp_hist_1d, cell_hist_1d, dark_hist_1d, xedges):
         """Plots 1D histograms for lamp, cell, and dark data."""
         fig, axs = plt.subplots(3, 1, figsize=(10, 15), sharex=True)
-
-        # Plot Lamp histogram
-        axs[0].bar(xedges[:-1], lamp_hist_1d, width=np.diff(xedges), edgecolor='black', align='edge')
-        axs[0].set_ylabel('Lamp Counts')
-        axs[0].set_title('1D Histogram of Lamp Data')
-
-        # Plot Cell histogram
-        axs[1].bar(xedges[:-1], cell_hist_1d, width=np.diff(xedges), edgecolor='black', align='edge')
-        axs[1].set_ylabel('Cell Counts')
-        axs[1].set_title('1D Histogram of Cell Data')
-
-        # Plot Dark histogram
-        axs[2].bar(xedges[:-1], dark_hist_1d, width=np.diff(xedges), edgecolor='black', align='edge')
-        axs[2].set_ylabel('Dark Counts')
-        axs[2].set_xlabel('Pixel Position')
-        axs[2].set_title('1D Histogram of Dark Data')
+        
+        if self.df_lamp is not None:
+            # Plot Lamp histogram
+            axs[0].bar(xedges[:-1], lamp_hist_1d, width=np.diff(xedges), edgecolor='black', align='edge')
+            axs[0].set_ylabel('Lamp Counts')
+            axs[0].set_title('1D Histogram of Lamp Data')
+        
+        if self.df_cell is not None:
+            # Plot Cell histogram
+            axs[1].bar(xedges[:-1], cell_hist_1d, width=np.diff(xedges), edgecolor='black', align='edge')
+            axs[1].set_ylabel('Cell Counts')
+            axs[1].set_title('1D Histogram of Cell Data')
+        if self.df_dark is not None:
+            
+            # Plot Dark histogram
+            axs[2].bar(xedges[:-1], dark_hist_1d, width=np.diff(xedges), edgecolor='black', align='edge')
+            axs[2].set_ylabel('Dark Counts')
+            axs[2].set_xlabel('Pixel Position')
+            axs[2].set_title('1D Histogram of Dark Data')
 
         # Adjust layout and display
         plt.tight_layout()
@@ -132,27 +141,29 @@ class ProcessTogether:
 
         plasma_mod = plt.cm.plasma.copy()
         plasma_mod.set_under('white')
-
-        ax_lamp = fig.add_subplot(gs[0, 0])
-        norm_lamp = Normalize(vmin=0.01, vmax=lamp_hist.max())
-        im_lamp = ax_lamp.imshow(lamp_hist.T, interpolation='nearest', origin='lower', cmap=plasma_mod, norm=norm_lamp, aspect='auto', extent=extent)
-        ax_lamp.set_aspect('equal')
-        ax_lamp.set_ylim(550, 1400)
-        ax_lamp.set_title('Lamp', fontsize=8)
-
-        ax_cell = fig.add_subplot(gs[1, 0])
-        norm_cell = Normalize(vmin=0.01, vmax=cell_hist.max())
-        im_cell = ax_cell.imshow(cell_hist.T, interpolation='nearest', origin='lower', cmap=plasma_mod, norm=norm_cell, aspect='auto', extent=extent)
-        ax_cell.set_aspect('equal')
-        ax_cell.set_ylim(550, 1400)
-        ax_cell.set_title('Cell', fontsize=8)
-
-        ax_dark = fig.add_subplot(gs[2, 0])
-        norm_dark = Normalize(vmin=0.01, vmax=dark_hist.max())
-        im_dark = ax_dark.imshow(dark_hist.T, interpolation='nearest', origin='lower', cmap=plasma_mod, norm=norm_dark, aspect='auto', extent=extent)
-        ax_dark.set_aspect('equal')
-        ax_dark.set_ylim(550, 1400)
-        ax_dark.set_title('Darks', fontsize=8)
+        
+        if self.df_lamp is not None:
+            ax_lamp = fig.add_subplot(gs[0, 0])
+            norm_lamp = Normalize(vmin=0.01, vmax=lamp_hist.max())
+            im_lamp = ax_lamp.imshow(lamp_hist.T, interpolation='nearest', origin='lower', cmap=plasma_mod, norm=norm_lamp, aspect='auto', extent=extent)
+            ax_lamp.set_aspect('equal')
+            ax_lamp.set_ylim(550, 1400)
+            ax_lamp.set_title('Lamp', fontsize=8)
+        
+        if self.df_cell is not None:
+            ax_cell = fig.add_subplot(gs[1, 0])
+            norm_cell = Normalize(vmin=0.01, vmax=cell_hist.max())
+            im_cell = ax_cell.imshow(cell_hist.T, interpolation='nearest', origin='lower', cmap=plasma_mod, norm=norm_cell, aspect='auto', extent=extent)
+            ax_cell.set_aspect('equal')
+            ax_cell.set_ylim(550, 1400)
+            ax_cell.set_title('Cell', fontsize=8)
+        if self.df_dark is not None:
+            ax_dark = fig.add_subplot(gs[2, 0])
+            norm_dark = Normalize(vmin=0.01, vmax=dark_hist.max())
+            im_dark = ax_dark.imshow(dark_hist.T, interpolation='nearest', origin='lower', cmap=plasma_mod, norm=norm_dark, aspect='auto', extent=extent)
+            ax_dark.set_aspect('equal')
+            ax_dark.set_ylim(550, 1400)
+            ax_dark.set_title('Darks', fontsize=8)
 
         cax = fig.add_subplot(gs[:, 1])
         fig.colorbar(im_lamp, cax=cax).set_label('Counts', rotation=270, labelpad=10)
@@ -167,7 +178,7 @@ class ProcessTogether:
         base_dir = os.path.join(directory_date, 'Clean')
         os.makedirs(base_dir, exist_ok=True)
         savefile = os.path.join(base_dir, f'{directory_date}_{identifier}_clean.csv')
-
+        '''
         df_combined = pd.DataFrame({
             'Integration_Time': pd.Series(np.round(max(self.df_lamp[timestamp_col].values - 1)))if self.df_lamp is not None else [],
             'lamp_x_filtered': pd.Series(self.filtered_lamp['xr'].values) if self.filtered_lamp is not None else [],
@@ -182,8 +193,44 @@ class ProcessTogether:
             'darkf_counts': pd.Series(self.y_dark) if self.y_dark is not None else [],
         })
 
+        # Create DataFrame only with valid columns
+        df_combined = pd.DataFrame({key: value for key, value in df_combined.items() if len(value) > 0})
+        '''
+        # Initialize an empty dictionary to hold the data
+        data_dict = {}
+    
+        # Add integration time if lamp data is present
+        if self.df_lamp is not None:
+            data_dict['Integration_Time'] = pd.Series(np.round(max(self.df_lamp[timestamp_col].values - 1)))
+        
+        # Add lamp data if available
+        if self.filtered_lamp is not None:
+            data_dict['lamp_x_filtered'] = pd.Series(self.filtered_lamp['xr'].values)
+            data_dict['lamp_y_filtered'] = pd.Series(self.filtered_lamp['y'].values)
+            data_dict['lamp_counts'] = pd.Series(self.y_lamp)
+    
+        # Add cell data if available
+        if self.filtered_cell is not None:
+            data_dict['cell_x_filtered'] = pd.Series(self.filtered_cell['xr'].values)
+            data_dict['cell_y_filtered'] = pd.Series(self.filtered_cell['y'].values)
+            data_dict['cell_counts'] = pd.Series(self.y_cell)
+    
+        # Add dark data if available
+        if self.filtered_dark is not None:
+            data_dict['dark_x_filtered'] = pd.Series(self.filtered_dark['xr'].values)
+            data_dict['dark_y_filtered'] = pd.Series(self.filtered_dark['y'].values)
+            data_dict['darkf_counts'] = pd.Series(self.y_dark)
+        
+        # Add the full x_pixel range, which is always present
+        data_dict['x_pixel'] = pd.Series(self.full_x_range)
+    
+        # Create DataFrame only with the available columns
+        df_combined = pd.DataFrame(data_dict)
+    
+        # Save to CSV
         df_combined.to_csv(savefile, index=False)
-
+        
+        
     def run(self, directory_date, identifier, timestamp_col='Timestamp'):
         """
         Run the entire processing routine: preprocess data, plot histograms, and save the processed data.
@@ -202,17 +249,17 @@ date = '08_01_2024'
 base_dir = os.path.join(directory_date, sub_directory)
 
 # Define identifiers
-id_lamp = 'lamp_2.25V_a6'
-id_filament_dark = 'dark_30sec'
-id_cell = 'cell_2.25V_a5'
+id_lamp = 'lamp_burn'
+id_filament_dark = 'dark_burn'
+#id_cell = 'cell_2.25V_a5'
 
 # Construct file paths
 lamp_filename = os.path.join(base_dir, f'{date}_{id_lamp}_processed.csv')
 dark_filename = os.path.join(base_dir, f'{date}_{id_filament_dark}_processed.csv')
-cell_filename = os.path.join(base_dir, f'{date}_{id_cell}_processed.csv')
+#cell_filename = os.path.join(base_dir, f'{date}_{id_cell}_processed.csv')
 
 # Initialize and run the processor
 processor = ProcessTogether()
-processor.read_data(lamp_path=lamp_filename, cell_path=cell_filename, dark_path=dark_filename)
-processor.run(directory_date=directory_date, identifier='2.25V_la6_ca5')
+processor.read_data(lamp_path=lamp_filename, cell_path=None, dark_path=dark_filename)
+processor.run(directory_date=directory_date, identifier='lamp_burn')
 
