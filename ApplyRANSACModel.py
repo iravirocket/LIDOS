@@ -167,6 +167,13 @@ class ApplyRANSACModel:
             
             x_corrected_all, x_corrected_filtered = self.correct_tilt_with_ransac(x_data, y_data, x_filtered, y_filtered,  data_type.capitalize())
 
+            print(f"X corrected all size  = {len(x_corrected_all)}")
+            print(f"X corrected filtered size = {len(x_corrected_filtered)}")
+            
+            print(f"X corrected all max  = {max(x_corrected_all)}")
+            print(f"X corrected filtered max = {max(x_corrected_filtered)}")
+             
+
             # Save corrected data to CSV
             #self.save_all_corrected_data(x_corrected_all, y_data, x_filtered, y_filtered, data_type)
             self.save_all_corrected_data(x_corrected_all, y_data, x_corrected_filtered, y_filtered, data_type)
@@ -190,8 +197,8 @@ class ApplyRANSACModel:
 
 
 # Example Usage
-directory_date = '08_01_2024'
-identifier = '2.25V_la6_ca5'
+directory_date = '07_30_2024'
+identifier = '2.5V_la_ca'
 base_dir = os.path.join(directory_date, 'Clean')
 filename = os.path.join(base_dir, f'{directory_date}_{identifier}_clean.csv')
 ransac_model_path = 'ransac_model.pkl'
