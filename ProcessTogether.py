@@ -42,7 +42,7 @@ class ProcessTogether:
         self.y_cell = None
         self.y_dark = None
         
-        self.full_x_range = np.arange(1, 2049)
+        self.full_x_range = np.arange(0, 2049)
         
     def read_data(self, lamp_path=None, cell_path=None, dark_path=None):
         """
@@ -61,7 +61,7 @@ class ProcessTogether:
         Preprocess the data, filter it, and calculate histograms.
         """
         
-        y_cut_min, y_cut_max = 550, 1400
+        y_cut_min, y_cut_max = 650, 1350
         xbins = 2048
         ybins = 100
 
@@ -110,19 +110,19 @@ class ProcessTogether:
         
         if self.df_lamp is not None:
             # Plot Lamp histogram
-            axs[0].bar(xedges[:-1], lamp_hist_1d, width=np.diff(xedges), edgecolor='black', align='edge')
+            axs[0].bar(xedges[:-1], lamp_hist_1d, width=np.diff(xedges), edgecolor='purple', align='edge')
             axs[0].set_ylabel('Lamp Counts')
             axs[0].set_title('1D Histogram of Lamp Data')
         
         if self.df_cell is not None:
             # Plot Cell histogram
-            axs[1].bar(xedges[:-1], cell_hist_1d, width=np.diff(xedges), edgecolor='black', align='edge')
+            axs[1].bar(xedges[:-1], cell_hist_1d, width=np.diff(xedges), edgecolor='purple', align='edge')
             axs[1].set_ylabel('Cell Counts')
             axs[1].set_title('1D Histogram of Cell Data')
         if self.df_dark is not None:
             
             # Plot Dark histogram
-            axs[2].bar(xedges[:-1], dark_hist_1d, width=np.diff(xedges), edgecolor='black', align='edge')
+            axs[2].bar(xedges[:-1], dark_hist_1d, width=np.diff(xedges), edgecolor='purple', align='edge')
             axs[2].set_ylabel('Dark Counts')
             axs[2].set_xlabel('Pixel Position')
             axs[2].set_title('1D Histogram of Dark Data')
@@ -135,7 +135,7 @@ class ProcessTogether:
         """
         Plot 2D histograms for lamp, cell, and darks data.
         """
-        fig = plt.figure(figsize=(15, 10))
+        fig = plt.figure(figsize=(10, 15))
         gs = gridspec.GridSpec(3, 2, width_ratios=[1, 0.05], height_ratios=[1, 1, 1])
         extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
 
@@ -178,25 +178,7 @@ class ProcessTogether:
         base_dir = os.path.join(directory_date, 'Clean')
         os.makedirs(base_dir, exist_ok=True)
         savefile = os.path.join(base_dir, f'{directory_date}_{identifier}_clean.csv')
-        '''
-        df_combined = pd.DataFrame({
-            'Integration_Time': pd.Series(np.round(max(self.df_lamp[timestamp_col].values - 1)))if self.df_lamp is not None else [],
-            'lamp_x_filtered': pd.Series(self.filtered_lamp['xr'].values) if self.filtered_lamp is not None else [],
-            'lamp_y_filtered': pd.Series(self.filtered_lamp['y'].values) if self.filtered_lamp is not None else [],
-            'cell_x_filtered': pd.Series(self.filtered_cell['xr'].values) if self.filtered_cell is not None else [],
-            'cell_y_filtered': pd.Series(self.filtered_cell['y'].values) if self.filtered_cell is not None else [],
-            'dark_x_filtered': pd.Series(self.filtered_dark['xr'].values) if self.filtered_dark is not None else [],
-            'dark_y_filtered': pd.Series(self.filtered_dark['y'].values) if self.filtered_dark is not None else [],
-            'x_pixel': pd.Series(self.full_x_range),
-            'lamp_counts': pd.Series(self.y_lamp) if self.y_lamp is not None else [],
-            'cell_counts': pd.Series(self.y_cell) if self.y_cell is not None else [],
-            'darkf_counts': pd.Series(self.y_dark) if self.y_dark is not None else [],
-        })
-
-        # Create DataFrame only with valid columns
-        df_combined = pd.DataFrame({key: value for key, value in df_combined.items() if len(value) > 0})
-        '''
-        # Initialize an empty dictionary to hold the data
+           # Initialize an empty dictionary to hold the data
         data_dict = {}
     
         # Add integration time if lamp data is present
@@ -243,23 +225,27 @@ class ProcessTogether:
         self.save_processed_data(directory_date, identifier, timestamp_col)
         
 # Define paths and identifiers
-directory_date = '08_01_2024'
+directory_date = '07_30_2024'
 sub_directory = 'Processed'
-date = '08_01_2024'
+date = '07_30_2024'
 base_dir = os.path.join(directory_date, sub_directory)
-
+voltage = '2.5V'
+lmark = 'a'
+cmark = 'a'
 # Define identifiers
-id_lamp = 'lamp_burn'
-id_filament_dark = 'dark_burn'
-#id_cell = 'cell_2.25V_a5'
+#id_lamp = 'lamp_3V_a6'
+id_lamp = f'lamp_{voltage}_{lmark}'
+id_filament_dark = 'dark_30sec'
+#id_cell = 'cell_3V_a5'
+id_cell = f'cell_{voltage}_{cmark}'
 
 # Construct file paths
 lamp_filename = os.path.join(base_dir, f'{date}_{id_lamp}_processed.csv')
 dark_filename = os.path.join(base_dir, f'{date}_{id_filament_dark}_processed.csv')
-#cell_filename = os.path.join(base_dir, f'{date}_{id_cell}_processed.csv')
+cell_filename = os.path.join(base_dir, f'{date}_{id_cell}_processed.csv')
 
 # Initialize and run the processor
 processor = ProcessTogether()
-processor.read_data(lamp_path=lamp_filename, cell_path=None, dark_path=dark_filename)
-processor.run(directory_date=directory_date, identifier='lamp_burn')
+processor.read_data(lamp_path=lamp_filename, cell_path=cell_filename, dark_path=dark_filename)
+processor.run(directory_date=directory_date, identifier=f'{voltage}_l{lmark}_c{cmark}')
 
